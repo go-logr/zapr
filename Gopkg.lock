@@ -5,7 +5,7 @@
   branch = "master"
   name = "github.com/go-logr/logr"
   packages = ["."]
-  revision = "8ed51d91dca6520e18bed1b2059d94aaeace0a67"
+  revision = "9fb12b3b21c5415d16ac18dc5cd42c1cfdd40c4e"
 
 [[projects]]
   name = "go.uber.org/atomic"

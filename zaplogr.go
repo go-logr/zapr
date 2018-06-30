@@ -141,7 +141,7 @@ func (l *zapLogger) V(level int) logr.InfoLogger {
 	return disabledInfoLogger
 }
 
-func (l *zapLogger) WithTags(keysAndValues ...interface{}) logr.Logger {
+func (l *zapLogger) WithValues(keysAndValues ...interface{}) logr.Logger {
 	newLogger := l.l.With(handleFields(l.l, keysAndValues)...)
 	return NewLogger(newLogger)
 }
