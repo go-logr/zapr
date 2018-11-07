@@ -131,7 +131,7 @@ func (l *zapLogger) Error(err error, msg string, keysAndVals ...interface{}) {
 }
 
 func (l *zapLogger) V(level int) logr.InfoLogger {
-	lvl := zapcore.Level(-1 * level)
+	lvl := ItoLvl(level)
 	if l.l.Core().Enabled(lvl) {
 		return &infoLogger{
 			lvl: lvl,
@@ -143,21 +143,25 @@ func (l *zapLogger) V(level int) logr.InfoLogger {
 
 func (l *zapLogger) WithValues(keysAndValues ...interface{}) logr.Logger {
 	newLogger := l.l.With(handleFields(l.l, keysAndValues)...)
-	return NewLogger(newLogger)
+	return NewLogger(newLogger, l.lvl)
 }
 
 func (l *zapLogger) WithName(name string) logr.Logger {
 	newLogger := l.l.Named(name)
-	return NewLogger(newLogger)
+	return NewLogger(newLogger, l.lvl)
+}
+
+func ItoLvl(level int) zapcore.Level {
+	return zapcore.Level(-1 * level)
 }
 
 // NewLogger creates a new logr.Logger using the given Zap Logger to log.
-func NewLogger(l *zap.Logger) logr.Logger {
+func NewLogger(l *zap.Logger, lvl zapcore.Level) logr.Logger {
 	return &zapLogger{
 		l: l,
 		infoLogger: infoLogger{
 			l:   l,
-			lvl: zap.InfoLevel,
+			lvl: lvl,
 		},
 	}
 }
