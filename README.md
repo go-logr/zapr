@@ -2,7 +2,7 @@ Zapr :zap:
 ==========
 
 A [logr](https://github.com/go-logr/logr) implementation using
-[Zap](go.uber.org/zap).
+[Zap](https://go.uber.org/zap).
 
 Usage
 -----
