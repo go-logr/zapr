@@ -1,4 +1,4 @@
-module github.com/StevenACoffman/zapr
+module github.com/go-logr/zapr
 
 go 1.12
 
