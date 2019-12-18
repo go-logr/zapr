@@ -13,7 +13,7 @@ import (
 
     "go.uber.org/zap"
     "github.com/go-logr/logr"
-    "github.com/directxman12/zapr"
+    "github.com/go-logr/zapr"
 )
 
 func main() {
