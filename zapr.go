@@ -143,16 +143,16 @@ func (l *zapLogger) V(level int) logr.InfoLogger {
 
 func (l *zapLogger) WithValues(keysAndValues ...interface{}) logr.Logger {
 	newLogger := l.l.With(handleFields(l.l, keysAndValues)...)
-	return internalNewLogger(newLogger, 0)
+	return newLoggerWithExtraSkip(newLogger, 0)
 }
 
 func (l *zapLogger) WithName(name string) logr.Logger {
 	newLogger := l.l.Named(name)
-	return internalNewLogger(newLogger, 0)
+	return newLoggerWithExtraSkip(newLogger, 0)
 }
 
-// internalNewLogger allows creation of loggers with variable levels of callstack skipping
-func internalNewLogger(l *zap.Logger, callerSkip int) logr.Logger {
+// newLoggerWithExtraSkip allows creation of loggers with variable levels of callstack skipping
+func newLoggerWithExtraSkip(l *zap.Logger, callerSkip int) logr.Logger {
 	log := l.WithOptions(zap.AddCallerSkip(callerSkip))
 	return &zapLogger{
 		l: log,
@@ -166,5 +166,5 @@ func internalNewLogger(l *zap.Logger, callerSkip int) logr.Logger {
 // NewLogger creates a new logr.Logger using the given Zap Logger to log.
 func NewLogger(l *zap.Logger) logr.Logger {
 	// creates a new logger skipping one level of callstack
-	return internalNewLogger(l, 1)
+	return newLoggerWithExtraSkip(l, 1)
 }
