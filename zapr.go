@@ -142,8 +142,10 @@ func (zl *zapLogger) V(level int) logr.Logger {
 }
 
 func (zl *zapLogger) WithValues(keysAndValues ...interface{}) logr.Logger {
-	newLogger := zl.l.With(handleFields(zl.l, keysAndValues)...)
-	return newLoggerWithExtraSkip(newLogger, 0)
+	return &zapLogger{
+		l:   zl.l.With(handleFields(zl.l, keysAndValues)...),
+		lvl: zl.lvl,
+	}
 }
 
 func (zl *zapLogger) WithName(name string) logr.Logger {

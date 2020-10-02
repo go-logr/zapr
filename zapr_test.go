@@ -38,3 +38,10 @@ func TestZapLogger_WithName(t *testing.T) {
 		t.Error("V(1).WithName() should not be enabled at InfoLevel")
 	}
 }
+
+func TestZapLogger_WithValues(t *testing.T) {
+	zl := infoLogger(t)
+	if zl.V(1).WithValues("k", "v").Enabled() {
+		t.Error("V(1).WithValues() should not be enabled at InfoLevel")
+	}
+}
