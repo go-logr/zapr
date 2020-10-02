@@ -147,8 +147,10 @@ func (zl *zapLogger) WithValues(keysAndValues ...interface{}) logr.Logger {
 }
 
 func (zl *zapLogger) WithName(name string) logr.Logger {
-	newLogger := zl.l.Named(name)
-	return newLoggerWithExtraSkip(newLogger, 0)
+	return &zapLogger{
+		l:   zl.l.Named(name),
+		lvl: zl.lvl,
+	}
 }
 
 // newLoggerWithExtraSkip allows creation of loggers with variable levels of callstack skipping
