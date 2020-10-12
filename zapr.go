@@ -151,6 +151,18 @@ func (zl *zapLogger) WithName(name string) logr.Logger {
 	return newLoggerWithExtraSkip(newLogger, 0)
 }
 
+// Underlier exposes access to the underlying logging implementation.  Since
+// callers only have a logr.Logger, they have to know which implementation is
+// in use, so this interface is less of an abstraction and more of way to test
+// type conversion.
+type Underlier interface {
+	GetUnderlying() *zap.Logger
+}
+
+func (zl *zapLogger) GetUnderlying() *zap.Logger {
+	return zl.l
+}
+
 // newLoggerWithExtraSkip allows creation of loggers with variable levels of callstack skipping
 func newLoggerWithExtraSkip(l *zap.Logger, callerSkip int) logr.Logger {
 	log := l.WithOptions(zap.AddCallerSkip(callerSkip))
