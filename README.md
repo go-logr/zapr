@@ -34,7 +34,7 @@ Implementation Details
 
 For the most part, concepts in Zap correspond directly with those in logr.
 
-Unlike Zap, all fields *must* be in the form of suggared fields --
+Unlike Zap, all fields *must* be in the form of sugared fields --
 it's illegal to pass a strongly-typed Zap field in a key position to any
 of the logging methods (`Log`, `Error`).
 
