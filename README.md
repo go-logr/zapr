@@ -55,7 +55,10 @@ the number gets larger (`DebugLevel` is -1, `InfoLevel` is 0, `WarnLevel` is 1,
 and so on).
 
 The `-2` in the above snippet means that `log.V(2).Info()` calls will be active.
-`-3` would enable `log.V(3).Info()`, etc.
+`-3` would enable `log.V(3).Info()`, etc.  Note that zap's levels are `int8`
+which means the most verbose level you can give it is -128.  The zapr
+implementation will cap `V()` levels greater than 127 to 127, so setting the
+zap level to -128 really means "activate all logs".
 
 Implementation Details
 ----------------------
