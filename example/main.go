@@ -48,7 +48,9 @@ func main() {
 	example(log.WithValues("module", "example"))
 }
 
-// If this were in another package, all it would depend on in logr, not zapr.
+// example only depends on logr except when explicitly breaking the
+// abstraction. Even that part is written so that it works with non-zap
+// loggers.
 func example(log logr.Logger) {
 	log.Info("hello", "val1", 1, "val2", map[string]int{"k": 1})
 	log.V(1).Info("you should see this")
@@ -56,4 +58,8 @@ func example(log logr.Logger) {
 	log.Error(nil, "uh oh", "trouble", true, "reasons", []float64{0.1, 0.11, 3.14})
 	log.Error(e{"an error occurred"}, "goodbye", "code", -1)
 	helper(log, "thru a helper")
+
+	if zapLogger, ok := log.GetSink().(zapr.Underlier); ok {
+		_ = zapLogger.GetUnderlying().Core().Sync()
+	}
 }
