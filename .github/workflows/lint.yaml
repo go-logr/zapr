@@ -1,0 +1,28 @@
+name: Run lint
+
+on: [ push, pull_request ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Go
+        uses: actions/setup-go@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Lint
+        run: |
+          docker run --rm -v `pwd`:/go/src/prj -w /go/src/prj \
+            golangci/golangci-lint golangci-lint run \
+                -v \
+                --disable-all \
+                -E deadcode \
+                -E gocritic \
+                -E gofmt \
+                -E govet \
+                -E ineffassign \
+                -E misspell \
+                -E revive \
+                -E staticcheck \
+                -E unused \
+                -E varcheck
