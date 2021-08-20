@@ -28,7 +28,7 @@ limitations under the License.
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// package zapr defines an implementation of the github.com/go-logr/logr
+// Package zapr defines an implementation of the github.com/go-logr/logr
 // interfaces built on top of Zap (go.uber.org/zap).
 //
 // Usage
