@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package zapr_test
 
 import (
 	"errors"
@@ -32,7 +32,7 @@ func encodeTime(_ time.Time, enc zapcore.PrimitiveArrayEncoder) {
 	enc.AppendString("TIMESTAMP")
 }
 
-func newZapLogger() *zap.Logger {
+func buildZapLogger() *zap.Logger {
 	// zap gets configured to not panic on invalid log calls
 	// and to produce simple, deterministic output on stdout.
 	zc := zap.NewProductionConfig()
@@ -46,7 +46,7 @@ func newZapLogger() *zap.Logger {
 }
 
 func ExampleNewLogger() {
-	log := zapr.NewLogger(newZapLogger())
+	log := zapr.NewLogger(buildZapLogger())
 	log.Info("info message with default options")
 	log.Error(errSome, "error message with default options")
 	log.Info("support for zap fields as key/value replacement is disabled", zap.Int("answer", 42))
@@ -64,7 +64,7 @@ func ExampleNewLogger() {
 }
 
 func ExampleLogInfoLevel() {
-	log := zapr.NewLoggerWithOptions(newZapLogger(), zapr.LogInfoLevel("v"))
+	log := zapr.NewLoggerWithOptions(buildZapLogger(), zapr.LogInfoLevel("v"))
 	log.Info("info message with numeric verbosity level")
 	log.Error(errSome, "error messages have no numeric verbosity level")
 	// Output:
@@ -73,21 +73,21 @@ func ExampleLogInfoLevel() {
 }
 
 func ExampleErrorKey() {
-	log := zapr.NewLoggerWithOptions(newZapLogger(), zapr.ErrorKey("err"))
+	log := zapr.NewLoggerWithOptions(buildZapLogger(), zapr.ErrorKey("err"))
 	log.Error(errSome, "error message with non-default error key")
 	// Output:
 	// {"level":"error","ts":"TIMESTAMP","msg":"error message with non-default error key","err":"some error"}
 }
 
 func ExampleAllowZapFields() {
-	log := zapr.NewLoggerWithOptions(newZapLogger(), zapr.AllowZapFields(true))
+	log := zapr.NewLoggerWithOptions(buildZapLogger(), zapr.AllowZapFields(true))
 	log.Info("log zap field", zap.Int("answer", 42))
 	// Output:
 	// {"level":"info","ts":"TIMESTAMP","msg":"log zap field","answer":42}
 }
 
 func ExampleDPanicOnBugs() {
-	log := zapr.NewLoggerWithOptions(newZapLogger(), zapr.DPanicOnBugs(false))
+	log := zapr.NewLoggerWithOptions(buildZapLogger(), zapr.DPanicOnBugs(false))
 	log.Info("warnings suppressed", zap.Int("answer", 42))
 	// Output:
 	// {"level":"info","ts":"TIMESTAMP","msg":"warnings suppressed"}
