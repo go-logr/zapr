@@ -384,3 +384,32 @@ func TestError(t *testing.T) {
 		})
 	}
 }
+
+// TestVModule tests Logger.VModule.
+func TestVModule(t *testing.T) {
+	var buffer bytes.Buffer
+	writer := bufio.NewWriter(&buffer)
+	vmodule := map[string]int{
+		"zapr_wrapper_*": 1,
+	}
+	opts := []zapr.Option{zapr.LogInfoLevel("v"), zapr.VModule(vmodule)}
+	log := zapr.NewLoggerWithOptions(newZapLogger(zapcore.InfoLevel, zapcore.AddSync(writer)), opts...)
+
+	log.V(1).Info("not logged")
+	myInfo(log.V(1), "also not logged")
+	myInfoInWrapper(log.V(1), "logged")
+
+	if err := writer.Flush(); err != nil {
+		t.Fatalf("unexpected error from Flush: %v", err)
+	}
+	logStr := buffer.String()
+	var ts float64
+	var lineNo int
+	expectedFormat := `{"ts":%f,"caller":"zapr/zapr_wrapper_test.go:%d","msg":"logged","v":1}`
+	n, err := fmt.Sscanf(logStr, expectedFormat, &ts, &lineNo)
+	if n != 2 || err != nil {
+		t.Errorf("log format error: %d elements, error %s:\n%s", n, err, logStr)
+	}
+	expected := fmt.Sprintf(expectedFormat, ts, lineNo)
+	require.JSONEq(t, expected, logStr)
+}

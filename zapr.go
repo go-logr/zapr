@@ -54,6 +54,10 @@ limitations under the License.
 package zapr
 
 import (
+	"path/filepath"
+	"runtime"
+	"strings"
+
 	"github.com/go-logr/logr"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -70,6 +74,10 @@ type zapLogger struct {
 	// NB: this looks very similar to zap.SugaredLogger, but
 	// deals with our desire to have multiple verbosity levels.
 	l *zap.Logger
+
+	// callDepth keeps track of how many additional call stacks
+	// need to be skipped.
+	callDepth int
 
 	// numericLevelKey controls whether the numeric logr level is
 	// added to each Info log message and with which key.
@@ -88,6 +96,10 @@ type zapLogger struct {
 	// that explain why a call was invalid (for example,
 	// non-string key). This is enabled by default.
 	panicMessages bool
+
+	// vmodule maps a glob pattern ("gopher*") to a verbosity threshold for
+	// that file.
+	vmodule map[string]int
 }
 
 const (
@@ -167,6 +179,7 @@ func (zl *zapLogger) handleFields(lvl int, args []interface{}, additional ...zap
 }
 
 func (zl *zapLogger) Init(ri logr.RuntimeInfo) {
+	zl.callDepth += ri.CallDepth
 	zl.l = zl.l.WithOptions(zap.AddCallerSkip(ri.CallDepth))
 }
 
@@ -181,10 +194,76 @@ func toZapLevel(lvl int) zapcore.Level {
 }
 
 func (zl zapLogger) Enabled(lvl int) bool {
+	if zl.vmodule != nil {
+		// TODO: cache call sites and the associated threshold. We will need it again
+		// in Info.
+		// https://github.com/kubernetes/klog/blob/2ca9ad30301bf30a8a6e0fa2110db6b8df699a91/klog.go#L1083-L1107
+		//
+		// We have to unwind the stack here because we need to know the additional call depth.
+		// Doing it inside the zap core via a custom LevelEnabled (https://pkg.go.dev/go.uber.org/zap@v1.19.0/zapcore#LevelEnabler)
+		// wouldn't work well:
+		// - no easy access to zl.callDepth (could be solved)
+		// - no way of knowing how deep inside the core it is getting called (probably different for
+		//   zl.l.Core().Enabled and zl.l.Check)
+		_, file, _, ok := runtime.Caller(zl.callDepth + 2)
+		if ok {
+			// The file is something like /a/b/c/d.go. We want just the d.
+			if strings.HasSuffix(file, ".go") {
+				file = file[:len(file)-3]
+			}
+			if slash := strings.LastIndex(file, "/"); slash >= 0 {
+				file = file[slash+1:]
+			}
+			for filter, v := range zl.vmodule {
+				// TODO (?): optimize by doing string comparison if the filter
+				// is not a pattern (https://github.com/kubernetes/klog/blob/2ca9ad30301bf30a8a6e0fa2110db6b8df699a91/klog.go#L316-L320).
+				match, _ := filepath.Match(filter, file)
+				if match {
+					return lvl <= v
+				}
+			}
+		}
+	}
+
 	return zl.l.Core().Enabled(toZapLevel(lvl))
 }
 
 func (zl *zapLogger) Info(lvl int, msg string, keysAndVals ...interface{}) {
+	// We need to know here whether we need to override the
+	// level before calling zl.l.Check. We already checked that
+	// in Enabled but here we don't know why we passed that check.
+	//
+	// TODO (?): always log at InfoLevel and drop the check?
+	if zl.vmodule != nil {
+		// TODO (?): cache call sites and the associated threshold
+		// https://github.com/kubernetes/klog/blob/2ca9ad30301bf30a8a6e0fa2110db6b8df699a91/klog.go#L1083-L1107
+		_, file, _, ok := runtime.Caller(zl.callDepth + 1)
+		if ok {
+			// The file is something like /a/b/c/d.go. We want just the d.
+			if strings.HasSuffix(file, ".go") {
+				file = file[:len(file)-3]
+			}
+			if slash := strings.LastIndex(file, "/"); slash >= 0 {
+				file = file[slash+1:]
+			}
+			for filter, v := range zl.vmodule {
+				// TODO (?): optimize by doing string comparison if the filter
+				// is not a pattern (https://github.com/kubernetes/klog/blob/2ca9ad30301bf30a8a6e0fa2110db6b8df699a91/klog.go#L316-L320).
+				match, _ := filepath.Match(filter, file)
+				if match {
+					if lvl <= v {
+						// The level emitted by zap itself (usually disabled)
+						// doesn't match. The numeric level is correct.
+						if checkedEntry := zl.l.Check(zap.WarnLevel, msg); checkedEntry != nil {
+							checkedEntry.Write(zl.handleFields(lvl, keysAndVals)...)
+						}
+					}
+					return
+				}
+			}
+		}
+	}
+
 	if checkedEntry := zl.l.Check(toZapLevel(lvl), msg); checkedEntry != nil {
 		checkedEntry.Write(zl.handleFields(lvl, keysAndVals)...)
 	}
@@ -210,6 +289,7 @@ func (zl *zapLogger) WithName(name string) logr.LogSink {
 
 func (zl *zapLogger) WithCallDepth(depth int) logr.LogSink {
 	newLogger := *zl
+	newLogger.callDepth += depth
 	newLogger.l = zl.l.WithOptions(zap.AddCallerSkip(depth))
 	return &newLogger
 }
@@ -288,6 +368,33 @@ func AllowZapFields(allowed bool) Option {
 func DPanicOnBugs(enabled bool) Option {
 	return func(zl *zapLogger) {
 		zl.panicMessages = enabled
+	}
+}
+
+// VModule overrides the normal verbosity check on a per-file basis.
+//
+// Normally, the verbosity of a message is converted to zap log level by
+// inverting it (level 0 is mapped to 0 = "info", level 1 to -1 = "debug",
+// level 2 to -2, etc.) and then the zap logger checks whether it should log
+// it.
+//
+// When VModule is set, zapr first determines the callsite and then checks
+// whether the source file (just the base name, without .go suffix) matches
+// a pattern. If so, the level for that pattern is compared against the
+// level of the message and the message gets emitted if its level is lower or
+// equal. If not, then the zap logger gets to decide whether it gets logged.
+func VModule(vmodule map[string]int) Option {
+	var clone map[string]int
+	if len(vmodule) > 0 {
+		// Deep copy to avoid errors when the caller makes changes to vmodule
+		// after VModule returns.
+		clone = map[string]int{}
+		for k, v := range vmodule {
+			clone[k] = v
+		}
+	}
+	return func(zl *zapLogger) {
+		zl.vmodule = clone
 	}
 }
 

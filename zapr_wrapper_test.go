@@ -35,3 +35,7 @@ func myInfoInc(logger logr.Logger, msg string, keysAndValues ...interface{}) {
 func myInfoInc2(logger logr.Logger, msg string, keysAndValues ...interface{}) {
 	logger.WithCallDepth(1).Info(msg, keysAndValues...)
 }
+
+func myInfoInWrapper(logger logr.Logger, msg string, keysAndValues ...interface{}) {
+	logger.Info(msg, keysAndValues...)
+}
