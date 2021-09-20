@@ -19,6 +19,7 @@ package main
 import (
 	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
+	"github.com/go-logr/zapr/internal/types"
 	"go.uber.org/zap"
 )
 
@@ -52,6 +53,8 @@ func main() {
 // abstraction. Even that part is written so that it works with non-zap
 // loggers.
 func example(log logr.Logger) {
+	v := types.ObjectRef{Name: "myname", Namespace: "myns"}
+	log.Info("marshal", "stringer", v.String(), "raw", v)
 	log.Info("hello", "val1", 1, "val2", map[string]int{"k": 1})
 	log.V(1).Info("you should see this")
 	log.V(1).V(1).Info("you should NOT see this")

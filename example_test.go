@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/go-logr/zapr"
+	"github.com/go-logr/zapr/internal/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -52,6 +53,8 @@ func ExampleNewLogger() {
 	log.Info("support for zap fields as key/value replacement is disabled", zap.Int("answer", 42))
 	log.Info("invalid key", 42, "answer")
 	log.Info("missing value", "answer")
+	obj := types.ObjectRef{Name: "john", Namespace: "doe"}
+	log.Info("marshaler", "stringer", obj.String(), "raw", obj)
 	// Output:
 	// {"level":"info","ts":"TIMESTAMP","msg":"info message with default options"}
 	// {"level":"error","ts":"TIMESTAMP","msg":"error message with default options","error":"some error"}
@@ -61,6 +64,7 @@ func ExampleNewLogger() {
 	// {"level":"info","ts":"TIMESTAMP","msg":"invalid key"}
 	// {"level":"dpanic","ts":"TIMESTAMP","msg":"odd number of arguments passed as key-value pairs for logging","ignored key":"answer"}
 	// {"level":"info","ts":"TIMESTAMP","msg":"missing value"}
+	// {"level":"info","ts":"TIMESTAMP","msg":"marshaler","stringer":"doe/john","raw":{"name":"john","namespace":"doe"}}
 }
 
 func ExampleLogInfoLevel() {
