@@ -214,6 +214,18 @@ func (zl *zapLogger) WithCallDepth(depth int) logr.LogSink {
 	return &newLogger
 }
 
+// FlushLogSink is an interface implemented by zapr to trigger flushing.
+type FlushLogSink interface {
+	// Flush invokes Sync() on the underlying zap logger.
+	Flush()
+}
+
+func (zl *zapLogger) Flush() {
+	_ = zl.l.Sync()
+}
+
+var _ FlushLogSink = &zapLogger{}
+
 // Underlier exposes access to the underlying logging implementation.  Since
 // callers only have a logr.Logger, they have to know which implementation is
 // in use, so this interface is less of an abstraction and more of way to test
