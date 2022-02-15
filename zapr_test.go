@@ -47,6 +47,40 @@ type discard struct{}
 
 func (d discard) Write(p []byte) (n int, err error) { return n, nil }
 
+type marshaler struct {
+	msg string
+}
+
+func (m *marshaler) String() string {
+	return m.msg
+}
+
+func (m *marshaler) MarshalLog() interface{} {
+	return "msg=" + m.msg
+}
+
+var _ fmt.Stringer = &marshaler{}
+var _ logr.Marshaler = &marshaler{}
+
+type stringer struct {
+	msg string
+}
+
+func (s *stringer) String() string {
+	return s.msg
+}
+
+var _ fmt.Stringer = &stringer{}
+
+type stringerPanic struct {
+}
+
+func (s *stringerPanic) String() string {
+	panic("fake panic")
+}
+
+var _ fmt.Stringer = &stringerPanic{}
+
 func newZapLogger(lvl zapcore.Level, w zapcore.WriteSyncer) *zap.Logger {
 	if w == nil {
 		w = zapcore.AddSync(discard{})
@@ -163,6 +197,33 @@ func TestInfo(t *testing.T) {
 			format: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"duration value argument","v":0,"duration":"5s"}
 `,
 			keysValues: []interface{}{"duration", time.Duration(5 * time.Second)},
+		},
+		{
+			msg: "valid marshaler",
+			format: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"valid marshaler","v":0,"obj":"msg=hello"}
+`,
+			keysValues: []interface{}{"obj", &marshaler{msg: "hello"}},
+		},
+		{
+			msg: "nil marshaler",
+			// Handled by our code: it just formats the error.
+			format: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"nil marshaler","v":0,"objError":"PANIC=runtime error: invalid memory address or nil pointer dereference"}
+`,
+			keysValues: []interface{}{"obj", (*marshaler)(nil)},
+		},
+		{
+			msg: "nil stringer",
+			// Handled by zap: it detects a nil pointer.
+			format: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"nil stringer","v":0,"obj":"<nil>"}
+`,
+			keysValues: []interface{}{"obj", (*stringer)(nil)},
+		},
+		{
+			msg: "panic stringer",
+			// Handled by zap: it prints the panic, but using a different key and format than funcr.
+			format: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"panic stringer","v":0,"objError":"PANIC=fake panic"}
+`,
+			keysValues: []interface{}{"obj", &stringerPanic{}},
 		},
 	}
 
