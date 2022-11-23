@@ -270,6 +270,13 @@ func TestInfo(t *testing.T) {
 			keysValues: []interface{}{slogGroup("obj", slogInt("int", 1), slogString("string", "hello"))},
 			needSlog:   true,
 		},
+		{
+			msg: "structured error",
+			formatSlog: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"structured error","v":0,"myerr":"hello world","myerrDetails":{"answer":42,"thanks":"fish"}}
+`,
+			keysValues: []interface{}{"myerr", slogStructuredError()},
+			needSlog:   true,
+		},
 	}
 
 	test := func(t *testing.T, logNumeric *string, enablePanics *bool, allowZapFields *bool, useSlog bool, data testCase) {

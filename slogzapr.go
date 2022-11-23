@@ -60,7 +60,7 @@ func (zl *zapLogger) Handle(_ context.Context, record slog.Record) error {
 		// Inline all attributes.
 		fields = append(fields, zap.Inline(zapcore.ObjectMarshalerFunc(func(enc zapcore.ObjectEncoder) error {
 			record.Attrs(func(attr slog.Attr) bool {
-				encodeSlog(enc, attr)
+				zl.encodeSlog(enc, attr)
 				return true
 			})
 			return nil
@@ -70,7 +70,7 @@ func (zl *zapLogger) Handle(_ context.Context, record slog.Record) error {
 	return nil
 }
 
-func encodeSlog(enc zapcore.ObjectEncoder, attr slog.Attr) {
+func (zl *zapLogger) encodeSlog(enc zapcore.ObjectEncoder, attr slog.Attr) {
 	if attr.Equal(slog.Attr{}) {
 		// Ignore empty attribute.
 		return
@@ -102,8 +102,14 @@ func encodeSlog(enc zapcore.ObjectEncoder, attr slog.Attr) {
 	case slog.KindString:
 		enc.AddString(attr.Key, attr.Value.String())
 	case slog.KindLogValuer:
+		// Structured error?
+		if err, ok := attr.Value.Any().(error); ok {
+			zl.zapError(attr.Key, err).AddTo(enc)
+			return
+		}
+
 		// This includes klog.KObj.
-		encodeSlog(enc, slog.Attr{
+		zl.encodeSlog(enc, slog.Attr{
 			Key:   attr.Key,
 			Value: attr.Value.Resolve(),
 		})
@@ -124,7 +130,7 @@ func encodeSlog(enc zapcore.ObjectEncoder, attr slog.Attr) {
 		if attr.Key == "" {
 			// Inline group.
 			for _, attr := range attrs {
-				encodeSlog(enc, attr)
+				zl.encodeSlog(enc, attr)
 			}
 			return
 		}
@@ -132,7 +138,7 @@ func encodeSlog(enc zapcore.ObjectEncoder, attr slog.Attr) {
 			// Ignore empty group.
 			return
 		}
-		_ = enc.AddObject(attr.Key, marshalAttrs(attrs))
+		_ = enc.AddObject(attr.Key, marshalAttrs{zl: zl, attrs: attrs})
 	default:
 		// We have to go through reflection in zap.Any to get support
 		// for e.g. fmt.Stringer.
@@ -140,16 +146,19 @@ func encodeSlog(enc zapcore.ObjectEncoder, attr slog.Attr) {
 	}
 }
 
-type marshalAttrs []slog.Attr
+type marshalAttrs struct {
+	zl    *zapLogger
+	attrs []slog.Attr
+}
 
-func (attrs marshalAttrs) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	for _, attr := range attrs {
-		encodeSlog(enc, attr)
+func (m marshalAttrs) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	for _, attr := range m.attrs {
+		m.zl.encodeSlog(enc, attr)
 	}
 	return nil
 }
 
-var _ zapcore.ObjectMarshaler = marshalAttrs(nil)
+var _ zapcore.ObjectMarshaler = marshalAttrs{}
 
 func pcToCallerEntry(pc uintptr) zapcore.EntryCaller {
 	if pc == 0 {
@@ -172,7 +181,7 @@ func pcToCallerEntry(pc uintptr) zapcore.EntryCaller {
 
 func (zl *zapLogger) WithAttrs(attrs []slog.Attr) slogr.SlogSink {
 	newLogger := *zl
-	newLogger.l = newLogger.l.With(zap.Inline(marshalAttrs(attrs)))
+	newLogger.l = newLogger.l.With(zap.Inline(marshalAttrs{zl: zl, attrs: attrs}))
 	return &newLogger
 }
 
