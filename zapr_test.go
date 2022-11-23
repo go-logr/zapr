@@ -81,6 +81,22 @@ func (s *stringerPanic) String() string {
 
 var _ fmt.Stringer = &stringerPanic{}
 
+type structuredError struct {
+}
+
+var _ error = structuredError{}
+
+func (err structuredError) Error() string {
+	return "hello world"
+}
+
+func (err structuredError) ErrorDetails() any {
+	return struct {
+		Answer int
+		Thanks string
+	}{42, "fish"}
+}
+
 func newZapLogger(lvl zapcore.Level, w zapcore.WriteSyncer) *zap.Logger {
 	if w == nil {
 		w = zapcore.AddSync(discard{})
@@ -269,6 +285,12 @@ func TestInfo(t *testing.T) {
 `,
 			keysValues: []interface{}{slogGroup("obj", slogInt("int", 1), slogString("string", "hello"))},
 			needSlog:   true,
+		},
+		{
+			msg: "structured error",
+			format: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"structured error","v":0,"myerr":"hello world","myerrDetails":{"Answer":42,"Thanks":"fish"}}
+`,
+			keysValues: []interface{}{"myerr", structuredError{}},
 		},
 	}
 

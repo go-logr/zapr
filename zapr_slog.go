@@ -27,8 +27,10 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-func zapIt(field string, val interface{}) zap.Field {
+func (zl *zapLogger) zapIt(field string, val interface{}) zap.Field {
 	switch valTyped := val.(type) {
+	case error:
+		return zl.zapError(field, valTyped)
 	case logr.Marshaler:
 		// Handle types that implement logr.Marshaler: log the replacement
 		// object instead of the original one.
@@ -39,10 +41,37 @@ func zapIt(field string, val interface{}) zap.Field {
 		val = slog.AnyValue(val).Resolve()
 	}
 	if slogValue, ok := val.(slog.Value); ok {
-		return zap.Inline(zapcore.ObjectMarshalerFunc(func(enc zapcore.ObjectEncoder) error {
-			encodeSlog(enc, slog.Attr{Key: field, Value: slogValue})
-			return nil
-		}))
+		return zl.zapSlogInline(field, slogValue)
 	}
 	return zap.Any(field, val)
+}
+
+type errorDetailer interface {
+	ErrorDetails() any
+}
+
+func (zl *zapLogger) zapError(field string, err error) zap.Field {
+	if err == nil {
+		return zap.Skip()
+	}
+	return zap.Inline(zapcore.ObjectMarshalerFunc(func(encoder zapcore.ObjectEncoder) error {
+		// Always log as a normal error first.
+		zap.NamedError(field, err).AddTo(encoder)
+
+		// Extra details are optional, but might be available if the error also
+		// implements slog.LogValuer.
+		if v, ok := err.(errorDetailer); ok {
+			field := field + zl.errorKeyDetailsSuffix
+			field, value := invokeErrorDetailer(field, v.ErrorDetails)
+			zl.zapIt(field, value).AddTo(encoder)
+		}
+		return nil
+	}))
+}
+
+func (zl *zapLogger) zapSlogInline(key string, value slog.Value) zap.Field {
+	return zap.Inline(zapcore.ObjectMarshalerFunc(func(enc zapcore.ObjectEncoder) error {
+		zl.encodeSlog(enc, slog.Attr{Key: key, Value: value})
+		return nil
+	}))
 }
