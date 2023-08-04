@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package types holds a copy of the ObjectRef type from klog for
+// use in the example.
 package types
 
 import (
