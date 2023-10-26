@@ -45,7 +45,7 @@ func fixedTimeEncoder(_ time.Time, enc zapcore.PrimitiveArrayEncoder) {
 // discard is a replacement for io.Discard, needed for Go 1.14.
 type discard struct{}
 
-func (d discard) Write(p []byte) (n int, err error) { return n, nil }
+func (d discard) Write(_ []byte) (int, error) { return 0, nil }
 
 type marshaler struct {
 	msg string
