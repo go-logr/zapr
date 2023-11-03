@@ -102,11 +102,13 @@ func newZapLogger(lvl zapcore.Level, w zapcore.WriteSyncer) *zap.Logger {
 func TestInfo(t *testing.T) {
 	type testCase struct {
 		msg            string
-		format         string
+		format         string // If empty, only formatting with slog as API is supported.
+		formatSlog     string // If empty, formatting with slog as API yields the same result as logr.
 		names          []string
 		withKeysValues []interface{}
 		keysValues     []interface{}
 		wrapper        func(logr.Logger, string, ...interface{})
+		needSlog       bool
 	}
 	var testDataInfo = []testCase{
 		{
@@ -139,8 +141,8 @@ func TestInfo(t *testing.T) {
 			names: []string{"hello", "world"},
 		},
 		{
-			msg: "key/value pairs",
-			format: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"key/value pairs","v":0,"ns":"default","podnum":2}
+			msg: "key-value pairs",
+			format: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"key-value pairs","v":0,"ns":"default","podnum":2}
 `,
 			keysValues: []interface{}{"ns", "default", "podnum", 2},
 		},
@@ -169,12 +171,16 @@ func TestInfo(t *testing.T) {
 			format: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"non-string key argument passed to logging, ignoring all later arguments","invalid key":200}
 {"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"invalid WithValues","ns":"default","podnum":2,"v":0}
 `,
+			formatSlog: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"invalid WithValues","ns":"default","podnum":2,"!BADKEY":200,"replica":"Running","!BADKEY":10,"v":0}
+`,
 			withKeysValues: []interface{}{"ns", "default", "podnum", 2, 200, "replica", "Running", 10},
 		},
 		{
 			msg: "strongly typed Zap field",
 			format: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"strongly-typed Zap Field passed to logr","zap field":{"Key":"zap-field-attempt","Type":11,"Integer":3,"String":"","Interface":null}}
 {"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"strongly typed Zap field","v":0,"ns":"default","podnum":2,"zap-field-attempt":3,"Running":10}
+`,
+			formatSlog: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"strongly typed Zap field","v":0,"ns":"default","podnum":2,"!BADKEY":{"Key":"zap-field-attempt","Type":11,"Integer":3,"String":"","Interface":null},"Running":10}
 `,
 			keysValues: []interface{}{"ns", "default", "podnum", 2, zap.Int("zap-field-attempt", 3), "Running", 10},
 		},
@@ -183,12 +189,16 @@ func TestInfo(t *testing.T) {
 			format: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"non-string key argument passed to logging, ignoring all later arguments","invalid key":200}
 {"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"non-string key argument","v":0,"ns":"default","podnum":2}
 `,
+			formatSlog: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"non-string key argument","v":0,"ns":"default","podnum":2,"!BADKEY":200,"replica":"Running","!BADKEY":10}
+`,
 			keysValues: []interface{}{"ns", "default", "podnum", 2, 200, "replica", "Running", 10},
 		},
 		{
 			msg: "missing value",
 			format: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"odd number of arguments passed as key-value pairs for logging","ignored key":"no-value"}
 {"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"missing value","v":0,"ns":"default","podnum":2}
+`,
+			formatSlog: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"missing value","v":0,"ns":"default","podnum":2,"!BADKEY":"no-value"}
 `,
 			keysValues: []interface{}{"ns", "default", "podnum", 2, "no-value"},
 		},
@@ -209,6 +219,8 @@ func TestInfo(t *testing.T) {
 			// Handled by our code: it just formats the error.
 			format: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"nil marshaler","v":0,"objError":"PANIC=runtime error: invalid memory address or nil pointer dereference"}
 `,
+			formatSlog: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"nil marshaler","v":0,"obj":"msg=<nil>"}
+`,
 			keysValues: []interface{}{"obj", (*marshaler)(nil)},
 		},
 		{
@@ -225,9 +237,54 @@ func TestInfo(t *testing.T) {
 `,
 			keysValues: []interface{}{"obj", &stringerPanic{}},
 		},
+		{
+			msg: "slog values",
+			format: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"slog values","v":0,"valuer":"some string","str":"another string","int64":-1,"uint64":2,"float64":3.124,"bool":true,"duration":"1s","timestamp":123.456789,"struct":{"SomeValue":42}}
+`,
+			keysValues: []interface{}{"valuer", slogValuer("some string"), "str", slogValue("another string"),
+				"int64", slogValue(int64(-1)), "uint64", slogValue(uint64(2)),
+				"float64", slogValue(float64(3.124)), "bool", slogValue(true),
+				"duration", slogValue(time.Second), "timestamp", slogValue(time.Time{} /* replaced by custom formatter */),
+				"struct", slogValue(struct{ SomeValue int }{SomeValue: 42}),
+			},
+			needSlog: true,
+		},
+		{
+			msg: "group with empty key",
+			formatSlog: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"group with empty key","v":0,"int":1,"string":"hello"}
+`,
+			keysValues: []interface{}{slogGroup("", slogInt("int", 1), slogString("string", "hello"))},
+			needSlog:   true,
+		},
+		{
+			msg: "empty group",
+			formatSlog: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"empty group","v":0}
+`,
+			keysValues: []interface{}{slogGroup("obj")},
+			needSlog:   true,
+		},
+		{
+			msg: "group with key",
+			formatSlog: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"group with key","v":0,"obj":{"int":1,"string":"hello"}}
+`,
+			keysValues: []interface{}{slogGroup("obj", slogInt("int", 1), slogString("string", "hello"))},
+			needSlog:   true,
+		},
 	}
 
-	test := func(t *testing.T, logNumeric *string, enablePanics *bool, allowZapFields *bool, data testCase) {
+	test := func(t *testing.T, logNumeric *string, enablePanics *bool, allowZapFields *bool, useSlog bool, data testCase) {
+		if (data.needSlog || useSlog) && !hasSlog() {
+			t.Skip("slog is not supported")
+		}
+		if allowZapFields != nil && *allowZapFields && useSlog {
+			t.Skip("zap fields not supported by slog")
+		}
+		if (enablePanics == nil || *enablePanics) && useSlog {
+			t.Skip("printing additional log messages not supported by slog")
+		}
+		if !useSlog && data.format == "" {
+			t.Skip("test case only supported for slog")
+		}
 		var buffer bytes.Buffer
 		writer := bufio.NewWriter(&buffer)
 		var sampleInfoLogger logr.Logger
@@ -248,16 +305,27 @@ func TestInfo(t *testing.T) {
 			}
 			sampleInfoLogger = zapr.NewLoggerWithOptions(zl, opts...)
 		}
-		if data.withKeysValues != nil {
-			sampleInfoLogger = sampleInfoLogger.WithValues(data.withKeysValues...)
-		}
-		for _, name := range data.names {
-			sampleInfoLogger = sampleInfoLogger.WithName(name)
-		}
-		if data.wrapper != nil {
-			data.wrapper(sampleInfoLogger, data.msg, data.keysValues...)
+		if useSlog {
+			if len(data.names) > 0 {
+				t.Skip("WithName not supported for slog")
+				// logger = logger.WithName(name)
+			}
+			if data.wrapper != nil {
+				t.Skip("slog does not support WithCallDepth")
+			}
+			logWithSlog(sampleInfoLogger, data.msg, data.withKeysValues, data.keysValues)
 		} else {
-			sampleInfoLogger.Info(data.msg, data.keysValues...)
+			if data.withKeysValues != nil {
+				sampleInfoLogger = sampleInfoLogger.WithValues(data.withKeysValues...)
+			}
+			for _, name := range data.names {
+				sampleInfoLogger = sampleInfoLogger.WithName(name)
+			}
+			if data.wrapper != nil {
+				data.wrapper(sampleInfoLogger, data.msg, data.keysValues...)
+			} else {
+				sampleInfoLogger.Info(data.msg, data.keysValues...)
+			}
 		}
 		if err := writer.Flush(); err != nil {
 			t.Fatalf("unexpected error from Flush: %v", err)
@@ -268,22 +336,26 @@ func TestInfo(t *testing.T) {
 		var dataFormatLines []string
 		noPanics := enablePanics != nil && !*enablePanics
 		withZapFields := allowZapFields != nil && *allowZapFields
-		for _, line := range strings.Split(data.format, "\n") {
+		format := data.format
+		if data.formatSlog != "" && useSlog {
+			format = data.formatSlog
+		}
+		for _, line := range strings.Split(format, "\n") {
 			// Potentially filter out all or some panic
 			// message. We can recognize them based on the
 			// expected special keys.
 			if strings.Contains(line, "invalid key") ||
 				strings.Contains(line, "ignored key") {
-				if noPanics {
+				if noPanics || useSlog {
 					continue
 				}
 			} else if strings.Contains(line, "zap field") {
-				if noPanics || withZapFields {
+				if noPanics || withZapFields || useSlog {
 					continue
 				}
 			}
 			haveZapField := strings.Index(line, `"zap-field`)
-			if haveZapField != -1 && !withZapFields && !strings.Contains(line, "zap field") {
+			if haveZapField != -1 && !withZapFields && !strings.Contains(line, "zap field") && !useSlog {
 				// When Zap fields are not allowed, output gets truncated at the first Zap field.
 				line = line[0:haveZapField-1] + "}"
 			}
@@ -291,6 +363,7 @@ func TestInfo(t *testing.T) {
 		}
 		if !assert.Equal(t, len(logStrLines), len(dataFormatLines)) {
 			t.Errorf("Info has wrong format: no. of lines in log is incorrect \n expected: %s\n got: %s", dataFormatLines, logStrLines)
+			return
 		}
 
 		for i := range logStrLines {
@@ -300,15 +373,20 @@ func TestInfo(t *testing.T) {
 			var ts float64
 			var lineNo int
 			format := dataFormatLines[i]
+			actual := logStrLines[i]
+			// TODO: as soon as all supported Go versions have log/slog,
+			// the code from slogzapr_test.go can be moved into zapr_test.go
+			// and this Replace can get removed.
+			actual = strings.ReplaceAll(actual, "zapr_slog_test.go", "zapr_test.go")
 			if logNumeric == nil || *logNumeric == "" {
 				format = regexp.MustCompile(`,"v":-?\d`).ReplaceAllString(format, "")
 			}
-			n, err := fmt.Sscanf(logStrLines[i], format, &ts, &lineNo)
+			n, err := fmt.Sscanf(actual, format, &ts, &lineNo)
 			if n != 2 || err != nil {
-				t.Errorf("log format error: %d elements, error %s:\n%s", n, err, logStrLines[i])
+				t.Errorf("log format error: %d elements, error %s:\n%s", n, err, actual)
 			}
 			expected := fmt.Sprintf(format, fixedTime, lineNo)
-			require.JSONEq(t, expected, logStrLines[i])
+			require.JSONEq(t, expected, actual)
 		}
 	}
 
@@ -325,7 +403,11 @@ func TestInfo(t *testing.T) {
 						t.Run(fmt.Sprintf("allow zap fields %s", name), func(t *testing.T) {
 							for _, data := range testDataInfo {
 								t.Run(data.msg, func(t *testing.T) {
-									test(t, logNumeric, panicMessages, allowZapFields, data)
+									for name, useSlog := range map[string]bool{"with-logr": false, "with-slog": true} {
+										t.Run(name, func(t *testing.T) {
+											test(t, logNumeric, panicMessages, allowZapFields, useSlog, data)
+										})
+									}
 								})
 							}
 						})

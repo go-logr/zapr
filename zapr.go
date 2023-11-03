@@ -168,15 +168,6 @@ func (zl *zapLogger) handleFields(lvl int, args []interface{}, additional ...zap
 	return append(fields, additional...)
 }
 
-func zapIt(field string, val interface{}) zap.Field {
-	// Handle types that implement logr.Marshaler: log the replacement
-	// object instead of the original one.
-	if marshaler, ok := val.(logr.Marshaler); ok {
-		field, val = invokeMarshaler(field, marshaler)
-	}
-	return zap.Any(field, val)
-}
-
 func invokeMarshaler(field string, m logr.Marshaler) (f string, ret interface{}) {
 	defer func() {
 		if r := recover(); r != nil {
