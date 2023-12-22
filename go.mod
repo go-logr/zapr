@@ -3,7 +3,7 @@ module github.com/go-logr/zapr
 go 1.18
 
 require (
-	github.com/go-logr/logr v1.3.0
+	github.com/go-logr/logr v1.4.1
 	github.com/stretchr/testify v1.8.4
 	go.uber.org/zap v1.26.0
 )
