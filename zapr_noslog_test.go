@@ -61,3 +61,7 @@ func slogValuer(value interface{}) interface{} {
 
 func logWithSlog(_ logr.Logger, _ string, _, _ []interface{}) {
 }
+
+func slogStructuredError() error {
+	return nil
+}
