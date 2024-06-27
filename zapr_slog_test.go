@@ -23,7 +23,6 @@ import (
 	"log/slog"
 
 	"github.com/go-logr/logr"
-	"github.com/go-logr/logr/slogr"
 )
 
 func hasSlog() bool {
@@ -71,7 +70,7 @@ func (v valuer) LogValue() slog.Value {
 var _ slog.LogValuer = valuer{}
 
 func logWithSlog(l logr.Logger, msg string, withKeysValues, keysValues []interface{}) {
-	logger := slog.New(slogr.NewSlogHandler(l))
+	logger := slog.New(logr.ToSlogHandler(l))
 	if withKeysValues != nil {
 		logger = logger.With(withKeysValues...)
 	}

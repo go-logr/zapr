@@ -24,12 +24,12 @@ import (
 	"log/slog"
 	"runtime"
 
-	"github.com/go-logr/logr/slogr"
+	"github.com/go-logr/logr"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-var _ slogr.SlogSink = &zapLogger{}
+var _ logr.SlogSink = &zapLogger{}
 
 func (zl *zapLogger) Handle(_ context.Context, record slog.Record) error {
 	zapLevel := zap.InfoLevel
@@ -170,13 +170,13 @@ func pcToCallerEntry(pc uintptr) zapcore.EntryCaller {
 	}
 }
 
-func (zl *zapLogger) WithAttrs(attrs []slog.Attr) slogr.SlogSink {
+func (zl *zapLogger) WithAttrs(attrs []slog.Attr) logr.SlogSink {
 	newLogger := *zl
 	newLogger.l = newLogger.l.With(zap.Inline(marshalAttrs(attrs)))
 	return &newLogger
 }
 
-func (zl *zapLogger) WithGroup(name string) slogr.SlogSink {
+func (zl *zapLogger) WithGroup(name string) logr.SlogSink {
 	newLogger := *zl
 	newLogger.l = newLogger.l.With(zap.Namespace(name))
 	return &newLogger
