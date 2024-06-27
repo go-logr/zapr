@@ -28,7 +28,7 @@ import (
 	"testing"
 	"testing/slogtest"
 
-	"github.com/go-logr/logr/slogr"
+	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -48,7 +48,7 @@ func TestSlogHandler(t *testing.T) {
 	core := zapcore.NewCore(encoder, zapcore.AddSync(&buffer), zapcore.Level(0))
 	zl := zap.New(core)
 	logger := zapr.NewLogger(zl)
-	handler := slogr.NewSlogHandler(logger)
+	handler := logr.ToSlogHandler(logger)
 
 	err := slogtest.TestHandler(handler, func() []map[string]any {
 		_ = zl.Sync()
@@ -157,7 +157,7 @@ func TestSlogCases(t *testing.T) {
 			core := zapcore.NewCore(encoder, zapcore.AddSync(&buffer), zapcore.Level(-10))
 			zl := zap.New(core)
 			logger := zapr.NewLoggerWithOptions(zl, zapr.LogInfoLevel("v"))
-			handler := slogr.NewSlogHandler(logger.V(tc.v))
+			handler := logr.ToSlogHandler(logger.V(tc.v))
 			require.NoError(t, handler.Handle(context.Background(), tc.record))
 			_ = zl.Sync()
 			require.JSONEq(t, tc.expected, buffer.String())
