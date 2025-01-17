@@ -63,8 +63,8 @@ func TestSlogHandler(t *testing.T) {
 		}); ok {
 			for _, err := range err.Unwrap() {
 				if !containsOne(err.Error(),
-					"a Handler should ignore a zero Record.Time",             // zapr always writes a time field.
-					"a Handler should not output groups for an empty Record", // Relies on WithGroup and that always opens a group. Text may change, see https://go.dev/cl/516155
+					"a Handler should ignore a zero Record.Time",                    // zapr always writes a time field.
+					"a Handler should not output groups if there are no attributes", // Relies on WithGroup and that always opens a group.
 				) {
 					t.Errorf("Unexpected error: %v", err)
 				}
