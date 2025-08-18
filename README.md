@@ -36,7 +36,7 @@ func main() {
 
 Via slog:
 
-```
+```go
 package main
 
 import (
