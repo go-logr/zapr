@@ -24,11 +24,15 @@ import (
 	"go.uber.org/zap"
 )
 
-func zapIt(field string, val interface{}) zap.Field {
+func (zl *zapLogger) zapIt(field string, val interface{}) zap.Field {
 	// Handle types that implement logr.Marshaler: log the replacement
 	// object instead of the original one.
 	if marshaler, ok := val.(logr.Marshaler); ok {
 		field, val = invokeMarshaler(field, marshaler)
 	}
 	return zap.Any(field, val)
+}
+
+func (zl *zapLogger) zapError(field string, err error) zap.Field {
+	return zap.NamedError(field, err)
 }
