@@ -35,54 +35,46 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+var unsupportedTests = func() map[string]bool {
+	m := make(map[string]bool)
+	for _, name := range []string{
+		// Cannot avoid empty groups.
+		"empty-group-record",
+		"nested-empty-group-record",
+	} {
+		m[name] = true
+	}
+	return m
+}()
+
 func TestSlogHandler(t *testing.T) {
 	var buffer bytes.Buffer
-	encoder := zapcore.NewJSONEncoder(zapcore.EncoderConfig{
-		MessageKey: slog.MessageKey,
-		TimeKey:    slog.TimeKey,
-		LevelKey:   slog.LevelKey,
-		EncodeLevel: func(level zapcore.Level, encoder zapcore.PrimitiveArrayEncoder) {
-			encoder.AppendInt(int(level))
-		},
-	})
-	core := zapcore.NewCore(encoder, zapcore.AddSync(&buffer), zapcore.Level(0))
-	zl := zap.New(core)
-	logger := zapr.NewLogger(zl)
-	handler := slogr.NewSlogHandler(logger)
+	slogtest.Run(t, func(t *testing.T) slog.Handler {
+		name := t.Name()
+		name = strings.SplitN(name, "/", 2)[1]
+		if unsupportedTests[name] {
+			t.Skip()
+		}
 
-	err := slogtest.TestHandler(handler, func() []map[string]any {
-		_ = zl.Sync()
+		encoder := zapcore.NewJSONEncoder(zapcore.EncoderConfig{
+			MessageKey: slog.MessageKey,
+			TimeKey:    slog.TimeKey,
+			LevelKey:   slog.LevelKey,
+			EncodeLevel: func(level zapcore.Level, encoder zapcore.PrimitiveArrayEncoder) {
+				encoder.AppendInt(int(level))
+			},
+		})
+
+		buffer.Reset()
+		core := zapcore.NewCore(encoder, zapcore.AddSync(&buffer), zapcore.Level(0))
+		zl := zap.New(core)
+		logger := zapr.NewLogger(zl)
+		handler := slogr.NewSlogHandler(logger)
+
+		return handler
+	}, func(*testing.T) map[string]any {
 		return parseOutput(t, buffer.Bytes())
 	})
-	t.Logf("Log output:\n%s\nAs JSON:\n%v\n", buffer.String(), parseOutput(t, buffer.Bytes()))
-	// Correlating failures with individual test cases is hard with the current API.
-	// See https://github.com/golang/go/issues/61758
-	if err != nil {
-		if err, ok := err.(interface {
-			Unwrap() []error
-		}); ok {
-			for _, err := range err.Unwrap() {
-				if !containsOne(err.Error(),
-					"a Handler should ignore a zero Record.Time",             // zapr always writes a time field.
-					"a Handler should not output groups for an empty Record", // Relies on WithGroup and that always opens a group. Text may change, see https://go.dev/cl/516155
-				) {
-					t.Errorf("Unexpected error: %v", err)
-				}
-			}
-			return
-		}
-		// Shouldn't be reached, errors from errors.Join can be split up.
-		t.Errorf("Unexpected errors:\n%v", err)
-	}
-}
-
-func containsOne(hay string, needles ...string) bool {
-	for _, needle := range needles {
-		if strings.Contains(hay, needle) {
-			return true
-		}
-	}
-	return false
 }
 
 // TestSlogCases covers some gaps in the coverage we get from
@@ -165,17 +157,10 @@ func TestSlogCases(t *testing.T) {
 	}
 }
 
-func parseOutput(t *testing.T, output []byte) []map[string]any {
-	var ms []map[string]any
-	for _, line := range bytes.Split(output, []byte{'\n'}) {
-		if len(line) == 0 {
-			continue
-		}
-		var m map[string]any
-		if err := json.Unmarshal(line, &m); err != nil {
-			t.Fatal(err)
-		}
-		ms = append(ms, m)
+func parseOutput(t *testing.T, output []byte) map[string]any {
+	var m map[string]any
+	if err := json.Unmarshal(output, &m); err != nil {
+		t.Fatal(err)
 	}
-	return ms
+	return m
 }
