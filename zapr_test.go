@@ -498,6 +498,119 @@ func TestLogNumeric(t *testing.T) {
 	}
 }
 
+// TestCustomToZapLevel tests support for custom toZapLevel implementation.
+func TestCustomToZapLevel(t *testing.T) {
+	type testCase struct {
+		name         string
+		level        zapcore.Level
+		toZapLevel   func(lvl int) zapcore.Level
+		expectedLogs []string
+	}
+	customToZapLevel := func(lvl int) zapcore.Level {
+		if lvl > 4 {
+			return zapcore.DebugLevel
+		}
+		if lvl > 0 {
+			return zapcore.InfoLevel
+		}
+		return zapcore.WarnLevel
+	}
+
+	var testCases = []testCase{
+		{
+			name:       "default, log everything",
+			level:      zapcore.Level(-100), // Log everything
+			toZapLevel: nil,                 // default
+			expectedLogs: []string{
+				`{"level":"info","msg":"test 0","v":0}`,
+				`{"level":"debug","msg":"test 1","v":1}`,
+				// No matching zap level for verbosity 2 and above
+				`{"level":"Level(-2)","msg":"test 2","v":2}`,
+				`{"level":"Level(-3)","msg":"test 3","v":3}`,
+				`{"level":"Level(-4)","msg":"test 4","v":4}`,
+				`{"level":"Level(-5)","msg":"test 5","v":5}`,
+				`{"level":"Level(-6)","msg":"test 6","v":6}`,
+				`{"level":"Level(-7)","msg":"test 7","v":7}`,
+			},
+		},
+		{
+			name:       "default, log debug",
+			level:      zapcore.DebugLevel,
+			toZapLevel: nil, // default
+			expectedLogs: []string{
+				`{"level":"info","msg":"test 0","v":0}`,
+				`{"level":"debug","msg":"test 1","v":1}`,
+				// Logs at verbosity 2 and above are dropped
+			},
+		},
+		{
+			name:       "custom, log everything",
+			level:      zapcore.Level(-100), // Log everything
+			toZapLevel: customToZapLevel,
+			expectedLogs: []string{
+				`{"level":"warn","msg":"test 0","v":0}`,
+				`{"level":"info","msg":"test 1","v":1}`,
+				`{"level":"info","msg":"test 2","v":2}`,
+				`{"level":"info","msg":"test 3","v":3}`,
+				`{"level":"info","msg":"test 4","v":4}`,
+				`{"level":"debug","msg":"test 5","v":5}`,
+				`{"level":"debug","msg":"test 6","v":6}`,
+				`{"level":"debug","msg":"test 7","v":7}`,
+			},
+		},
+		{
+			name:       "custom, log info",
+			level:      zapcore.InfoLevel,
+			toZapLevel: customToZapLevel,
+			expectedLogs: []string{
+				`{"level":"warn","msg":"test 0","v":0}`,
+				`{"level":"info","msg":"test 1","v":1}`,
+				`{"level":"info","msg":"test 2","v":2}`,
+				`{"level":"info","msg":"test 3","v":3}`,
+				`{"level":"info","msg":"test 4","v":4}`,
+				// Logs at verbosity 5 and above are mapped to Debug and therefore dropped
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buffer bytes.Buffer
+			writer := bufio.NewWriter(&buffer)
+			var sampleInfoLogger logr.Logger
+			encoder := zapcore.NewJSONEncoder(zapcore.EncoderConfig{
+				MessageKey:  "msg",
+				LevelKey:    "level",
+				EncodeLevel: zapcore.LowercaseLevelEncoder,
+			})
+			core := zapcore.NewCore(encoder, zapcore.AddSync(writer), tc.level)
+			zl := zap.New(core)
+			opts := []zapr.Option{zapr.LogInfoLevel("v")}
+			if tc.toZapLevel != nil {
+				opts = append(opts, zapr.ToZapLevel(tc.toZapLevel))
+			}
+			sampleInfoLogger = zapr.NewLoggerWithOptions(zl, opts...)
+			for i := 0; i < 8; i++ {
+				sampleInfoLogger.V(i).Info(fmt.Sprintf("test %d", i))
+			}
+			if err := writer.Flush(); err != nil {
+				t.Fatalf("unexpected error from Flush: %v", err)
+			}
+			logOutput := buffer.String()
+			var lines []string
+			sc := bufio.NewScanner(strings.NewReader(logOutput))
+			for sc.Scan() {
+				lines = append(lines, sc.Text())
+			}
+			require.Equal(t, len(tc.expectedLogs), len(lines))
+			for i, expected := range tc.expectedLogs {
+				actual := lines[i]
+				require.JSONEq(t, expected, actual)
+			}
+		})
+	}
+}
+
 // TestError tests Logger.Error.
 func TestError(t *testing.T) {
 	for _, logError := range []string{"err", "error"} {

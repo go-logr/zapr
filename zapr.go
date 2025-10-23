@@ -90,6 +90,9 @@ type zapLogger struct {
 	// that explain why a call was invalid (for example,
 	// non-string key). This is enabled by default.
 	panicMessages bool
+
+	// toZapLevel maps logr numeric level to appropriate zap level.
+	toZapLevel func(lvl int) zapcore.Level
 }
 
 const (
@@ -184,7 +187,7 @@ func (zl *zapLogger) Init(ri logr.RuntimeInfo) {
 
 // Zap levels are int8 - make sure we stay in bounds.  logr itself should
 // ensure we never get negative values.
-func toZapLevel(lvl int) zapcore.Level {
+func defaultToZapLevel(lvl int) zapcore.Level {
 	if lvl > 127 {
 		lvl = 127
 	}
@@ -193,11 +196,11 @@ func toZapLevel(lvl int) zapcore.Level {
 }
 
 func (zl zapLogger) Enabled(lvl int) bool {
-	return zl.l.Core().Enabled(toZapLevel(lvl))
+	return zl.l.Core().Enabled(zl.toZapLevel(lvl))
 }
 
 func (zl *zapLogger) Info(lvl int, msg string, keysAndVals ...interface{}) {
-	if checkedEntry := zl.l.Check(toZapLevel(lvl), msg); checkedEntry != nil {
+	if checkedEntry := zl.l.Check(zl.toZapLevel(lvl), msg); checkedEntry != nil {
 		checkedEntry.Write(zl.handleFields(lvl, keysAndVals)...)
 	}
 }
@@ -253,6 +256,7 @@ func NewLoggerWithOptions(l *zap.Logger, opts ...Option) logr.Logger {
 	}
 	zl.errorKey = "error"
 	zl.panicMessages = true
+	zl.toZapLevel = defaultToZapLevel
 	for _, option := range opts {
 		option(zl)
 	}
@@ -300,6 +304,14 @@ func AllowZapFields(allowed bool) Option {
 func DPanicOnBugs(enabled bool) Option {
 	return func(zl *zapLogger) {
 		zl.panicMessages = enabled
+	}
+}
+
+// ToZapLevel overrides the default function mapping logr's numeric level
+// to corresponding zap's level.
+func ToZapLevel(toZapLevel func(lvl int) zapcore.Level) Option {
+	return func(zl *zapLogger) {
+		zl.toZapLevel = toZapLevel
 	}
 }
 
