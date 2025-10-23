@@ -16,6 +16,8 @@ limitations under the License.
 
 // Package types holds a copy of the ObjectRef type from klog for
 // use in the example.
+//
+//nolint:revive // Yes, it's a meaningless package name - but not that uncommon...
 package types
 
 import (
