@@ -20,6 +20,7 @@ limitations under the License.
 package zapr_test
 
 import (
+	"errors"
 	"log/slog"
 
 	"github.com/go-logr/logr"
@@ -75,4 +76,23 @@ func logWithSlog(l logr.Logger, msg string, withKeysValues, keysValues []interfa
 		logger = logger.With(withKeysValues...)
 	}
 	logger.Info(msg, keysValues...)
+}
+
+func slogStructuredError() error {
+	return structuredError{
+		error: errors.New("hello world"),
+		Value: slog.GroupValue(slog.Int("answer", 42), slog.String("thanks", "fish")),
+	}
+}
+
+type structuredError struct {
+	error
+	slog.Value
+}
+
+var _ error = structuredError{}
+var _ slog.LogValuer = structuredError{}
+
+func (err structuredError) LogValue() slog.Value {
+	return err.Value
 }
