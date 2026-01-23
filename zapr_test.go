@@ -33,6 +33,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/go-logr/logr"
+	"github.com/go-logr/logr/funcr"
 	"github.com/go-logr/zapr"
 )
 
@@ -291,6 +292,18 @@ func TestInfo(t *testing.T) {
 			format: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"structured error","v":0,"myerr":"hello world","myerrDetails":{"Answer":42,"Thanks":"fish"}}
 `,
 			keysValues: []interface{}{"myerr", structuredError{}},
+		},
+		{
+			msg: "PseudoStruct",
+			format: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"PseudoStruct","v":0,"struct":{"hello":"world","answer":42}}
+`,
+			keysValues: []interface{}{"struct", funcr.PseudoStruct{"hello", "world", "answer", 42}},
+		},
+		{
+			msg: "bad PseudoStruct",
+			format: `{"ts":%f,"caller":"zapr/zapr_test.go:%d","msg":"bad PseudoStruct","v":0,"struct":{"hello":"world","answer":"<missing>"}}
+`,
+			keysValues: []interface{}{"struct", funcr.PseudoStruct{"hello", "world", "answer"}},
 		},
 	}
 
