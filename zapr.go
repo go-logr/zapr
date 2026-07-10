@@ -81,6 +81,10 @@ type zapLogger struct {
 	// Logger.Error calls.
 	errorKey string
 
+	// errorKeyDetailsSuffix gets appended to the field name
+	// when logging additional details obtained via MarshalLog.
+	errorKeyDetailsSuffix string
+
 	// allowZapFields enables logging of strongly-typed Zap
 	// fields. It is off by default because it breaks
 	// implementation agnosticism.
@@ -139,7 +143,7 @@ func (zl *zapLogger) handleFields(lvl int, args []interface{}, additional ...zap
 				continue
 			}
 			if zl.panicMessages {
-				zl.l.WithOptions(zap.AddCallerSkip(1)).DPanic("strongly-typed Zap Field passed to logr", zapIt("zap field", args[i]))
+				zl.l.WithOptions(zap.AddCallerSkip(1)).DPanic("strongly-typed Zap Field passed to logr", zl.zapIt("zap field", args[i]))
 			}
 			break
 		}
@@ -147,7 +151,7 @@ func (zl *zapLogger) handleFields(lvl int, args []interface{}, additional ...zap
 		// make sure this isn't a mismatched key
 		if i == len(args)-1 {
 			if zl.panicMessages {
-				zl.l.WithOptions(zap.AddCallerSkip(1)).DPanic("odd number of arguments passed as key-value pairs for logging", zapIt("ignored key", args[i]))
+				zl.l.WithOptions(zap.AddCallerSkip(1)).DPanic("odd number of arguments passed as key-value pairs for logging", zl.zapIt("ignored key", args[i]))
 			}
 			break
 		}
@@ -159,12 +163,12 @@ func (zl *zapLogger) handleFields(lvl int, args []interface{}, additional ...zap
 		if !isString {
 			// if the key isn't a string, DPanic and stop logging
 			if zl.panicMessages {
-				zl.l.WithOptions(zap.AddCallerSkip(1)).DPanic("non-string key argument passed to logging, ignoring all later arguments", zapIt("invalid key", key))
+				zl.l.WithOptions(zap.AddCallerSkip(1)).DPanic("non-string key argument passed to logging, ignoring all later arguments", zl.zapIt("invalid key", key))
 			}
 			break
 		}
 
-		fields = append(fields, zapIt(keyStr, val))
+		fields = append(fields, zl.zapIt(keyStr, val))
 		i += 2
 	}
 
@@ -179,6 +183,17 @@ func invokeMarshaler(field string, m logr.Marshaler) (f string, ret interface{})
 		}
 	}()
 	return field, m.MarshalLog()
+}
+
+func invokeErrorDetailer(field string, details func() any) (f string, ret any) {
+	defer func() {
+		if r := recover(); r != nil {
+			ret = fmt.Sprintf("PANIC=%s", r)
+			f = field + "Error"
+		}
+	}()
+	ret = details()
+	return field, details()
 }
 
 func (zl *zapLogger) Init(ri logr.RuntimeInfo) {
@@ -207,7 +222,7 @@ func (zl *zapLogger) Info(lvl int, msg string, keysAndVals ...interface{}) {
 
 func (zl *zapLogger) Error(err error, msg string, keysAndVals ...interface{}) {
 	if checkedEntry := zl.l.Check(zap.ErrorLevel, msg); checkedEntry != nil {
-		checkedEntry.Write(zl.handleFields(noLevel, keysAndVals, zap.NamedError(zl.errorKey, err))...)
+		checkedEntry.Write(zl.handleFields(noLevel, keysAndVals, zl.zapError(zl.errorKey, err))...)
 	}
 }
 
@@ -255,6 +270,7 @@ func NewLoggerWithOptions(l *zap.Logger, opts ...Option) logr.Logger {
 		l: log,
 	}
 	zl.errorKey = "error"
+	zl.errorKeyDetailsSuffix = "Details"
 	zl.panicMessages = true
 	zl.toZapLevel = defaultToZapLevel
 	for _, option := range opts {
@@ -282,6 +298,15 @@ func LogInfoLevel(key string) Option {
 func ErrorKey(key string) Option {
 	return func(zl *zapLogger) {
 		zl.errorKey = key
+	}
+}
+
+// ErrorKeyDetailsSuffix replaces the default "Details" suffix that gets
+// appended to the field name for an error when logging the error details
+// obtained through MarshalLog.
+func ErrorKeyDetailsSuffix(key string) Option {
+	return func(zl *zapLogger) {
+		zl.errorKeyDetailsSuffix = key
 	}
 }
 
