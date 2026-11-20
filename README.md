@@ -105,3 +105,11 @@ The zapr `logr.LogSink` implementation also implements `logr.SlogHandler`. That
 enables `slogr.NewSlogHandler` to provide a `slog.Handler` which just passes
 parameters through to zapr. zapr handles special slog values (Group,
 LogValuer), regardless of which front-end API is used.
+
+The value logged for errors is the string returned by `error.Error`.
+If the error also provides `ErrorDetails() any`, then it is treated as a
+"structured error" and the value returned by `ErrorDetails` is
+logged *in addition* to the error string, using a key that is the original
+key plus a "Details" suffix. For example, `"err", err` will be logged as if
+`"err", err.Error(), "errDetails", err.ErrorDetails()` had been passed. This
+ensures that the "err" key is always associated with a string.

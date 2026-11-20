@@ -19,15 +19,19 @@ limitations under the License.
 package zapr
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/go-logr/logr"
+	"github.com/go-logr/logr/funcr"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-func zapIt(field string, val interface{}) zap.Field {
+func (zl *zapLogger) zapIt(field string, val interface{}) zap.Field {
 	switch valTyped := val.(type) {
+	case error:
+		return zl.zapError(field, valTyped)
 	case logr.Marshaler:
 		// Handle types that implement logr.Marshaler: log the replacement
 		// object instead of the original one.
@@ -36,12 +40,51 @@ func zapIt(field string, val interface{}) zap.Field {
 		// The same for slog.LogValuer. We let slog.Value handle
 		// potential panics and recursion.
 		val = slog.AnyValue(val).Resolve()
-	}
-	if slogValue, ok := val.(slog.Value); ok {
-		return zap.Inline(zapcore.ObjectMarshalerFunc(func(enc zapcore.ObjectEncoder) error {
-			encodeSlog(enc, slog.Attr{Key: field, Value: slogValue})
+	case funcr.PseudoStruct:
+		return zap.Object(field, zapcore.ObjectMarshalerFunc(func(encoder zapcore.ObjectEncoder) error {
+			for i := 0; i < len(valTyped); i += 2 {
+				field := fmt.Sprintf("%s", valTyped[i])
+				value := any("<missing>")
+				if i+1 < len(valTyped) {
+					value = valTyped[i+1]
+				}
+				zl.zapIt(field, value).AddTo(encoder)
+			}
 			return nil
 		}))
 	}
+	if slogValue, ok := val.(slog.Value); ok {
+		return zl.zapSlogInline(field, slogValue)
+	}
 	return zap.Any(field, val)
+}
+
+type errorDetailer interface {
+	ErrorDetails() any
+}
+
+func (zl *zapLogger) zapError(field string, err error) zap.Field {
+	if err == nil {
+		return zap.Skip()
+	}
+	return zap.Inline(zapcore.ObjectMarshalerFunc(func(encoder zapcore.ObjectEncoder) error {
+		// Always log as a normal error first.
+		zap.NamedError(field, err).AddTo(encoder)
+
+		// Extra details are optional, but might be available if the error also
+		// provides ErrorDetails.
+		if v, ok := err.(errorDetailer); ok {
+			field := field + zl.errorKeyDetailsSuffix
+			field, value := invokeErrorDetailer(field, v.ErrorDetails)
+			zl.zapIt(field, value).AddTo(encoder)
+		}
+		return nil
+	}))
+}
+
+func (zl *zapLogger) zapSlogInline(key string, value slog.Value) zap.Field {
+	return zap.Inline(zapcore.ObjectMarshalerFunc(func(enc zapcore.ObjectEncoder) error {
+		zl.encodeSlog(enc, slog.Attr{Key: key, Value: value})
+		return nil
+	}))
 }
